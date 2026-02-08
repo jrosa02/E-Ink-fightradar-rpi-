@@ -1,6 +1,6 @@
 import geopandas as gpd
 import matplotlib.pyplot as plt
-from PlanesGetter import poland_bbox, BBox
+from DataFetch import poland_bbox, BBox
 
 def draw_base_geography(ax, bbox):
     # Countries

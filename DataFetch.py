@@ -45,8 +45,8 @@ class DataFetch():
         wind_dir = forecast.current_weather.wind_direction
         wind_speed = forecast.current_weather.wind_speed
         ddata = DData(
-            update_datetime=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-            forecast_datetime=for_datetime,
+            update_datetime=datetime.datetime.now(),
+            forecast_datetime=for_datetime.strftime("%Y-%m-%d %H:%M"),
             curr_temp=temp,
             curr_wind_direction=wind_dir,
             curr_wind_speed=wind_speed,

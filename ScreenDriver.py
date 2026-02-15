@@ -29,15 +29,16 @@ class ScreenDriver(abc.ABC):
 
 if "armv6l" in platform.uname().machine.lower():
     logging.info("Detected Raspberry Pi platform.")
-    libdir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'lib')
+    libdir = './e-Paper/RaspberryPi_JetsonNano/python/lib'
     if os.path.exists(libdir):
         sys.path.append(libdir)
-    from e_Paper.RaspberryPi_JetsonNano.python.lib.waveshare_epd import epd7in5_V2
+    from waveshare_epd import epd7in5_V2
 
     class EpdScreenDriver(ScreenDriver):
         def __init__(self):
             super().__init__()
             self.epd = epd7in5_V2.EPD()
+            self.init()
 
         def init(self):
             logging.info("Initializing e-paper display...")

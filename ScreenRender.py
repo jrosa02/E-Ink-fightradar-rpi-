@@ -11,7 +11,7 @@ from PIL import Image,ImageDraw,ImageColor, ImageFont
 from DataFetch import WeatherData
 
 EDP7IN5_SHAPE = (800, 480)
-BND_WIDTH = 1
+BND_WIDTH = 0
 BLACK = 1
 WHITE = 0
 
@@ -68,7 +68,7 @@ class ScreenRender():
         footer_y = header_h + panel_h + divider_h
 
         # 2. Normalized Widths (Must sum to 1.0)
-        ratios = [0.35, 0.20, 0.15, 0.15, 0.15]
+        ratios = [0.35, 0.20, 0.15, 0.10, 0.20]
         
         # 3. Calculate X-coordinates (Edges)
         # [0, 0.25, 0.45, 0.60, 0.80, 1.0] * screen_width
@@ -118,12 +118,13 @@ class ScreenRender():
 
     @simple_panel_renderer(width=2)
     def _render_datetime(self, draw: ImageDraw.ImageDraw, data: WeatherData):
-        draw.text((300, 15), f"{data.update_datetime.strftime("%Y-%m-%d %H:%M")}", font=self.DejaVu[24], fill=BLACK, align="center")
+        w, h = draw.im.size
+        draw.text((w//2, h//2), f"{data.update_datetime.strftime("%Y-%m-%d %H:%M")}", font=self.DejaVu[24], fill=BLACK, anchor='mm')
 
     @simple_panel_renderer()
     def _render_current_temperature(self, draw: ImageDraw.ImageDraw, data: WeatherData):
         w, h = draw.im.size
-        draw.text((w//2, 30), f"{int(data.current_weather.temperature-20)}°", font=self.DejaVuBold[110], fill=BLACK, anchor="mt")
+        draw.text((w//2, 30), f"{int(data.current_weather.temperature)}°", font=self.DejaVuBold[110], fill=BLACK, anchor="mt")
         draw.text((w//2, 150), f"{int(data.cum_day_weather.temp_c_min)}:{int(data.cum_day_weather.temp_c_max)}°", font=self.DejaVu[48], fill=BLACK, anchor="mt")
 
     @simple_panel_renderer()
@@ -139,10 +140,11 @@ class ScreenRender():
 
     @simple_panel_renderer()
     def _render_wind(self, draw: ImageDraw.ImageDraw, data: WeatherData):
-        angle_to_arrow = lambda a: ["↑","↗","→","↘","↓","↙","←","↖"][-round(a / 45) % 8]
-        angle_to_card = lambda a: ["S","SW","W","NW","N","NE","E","SE"][-round(a / 45) % 8]
-        draw.text((50, 10), f"{angle_to_arrow(data.current_weather.wind_speed)}", font=self.DejaVu[64], fill=BLACK)
-        draw.text((50, 100), f"{angle_to_card(data.current_weather.wind_direction)}", font=self.DejaVu[64], fill=BLACK)
+        w, h = draw.im.size
+        angle_to_arrow = lambda a: ["↓","↙","←","↖","↑","↗","→","↘",][round(a / 45) % 8]
+        angle_to_card = lambda a: ["N","NE","E","SE", "S","SW","W","NW"][round(a / 45) % 8]
+        draw.text((w//2, 10), f"{angle_to_arrow(data.current_weather.wind_speed)}", font=self.DejaVu[64], fill=BLACK, anchor='mt')
+        draw.text((w//2, 100), f"{angle_to_card(data.current_weather.wind_direction)}", font=self.DejaVu[64], fill=BLACK, anchor='mt')
         
 
     @simple_panel_renderer()
@@ -154,7 +156,7 @@ class ScreenRender():
     def _render_divider(self, draw: ImageDraw.ImageDraw, data: WeatherData):
         w, h = draw.im.size
         draw.rectangle([0, 0, w, h], fill=BLACK)
-        draw.text((w//2, h//2), "DUPAAAAAA", font=self.DejaVu[32], fill=WHITE, anchor='mm')
+        draw.text((w//2, h//2), "Miejsce na twoją reklamę", font=self.DejaVu[32], fill=WHITE, anchor='mm')
 
 
     def _render_hourly(self, data: WeatherData, rois: list[RRoi]):

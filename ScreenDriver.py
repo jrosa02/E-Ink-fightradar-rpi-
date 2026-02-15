@@ -9,13 +9,10 @@ from PIL import Image
 from ScreenRender import EDP7IN5_SHAPE
 
 
-logging.basicConfig(level=logging.DEBUG)
-
 class ScreenDriver(abc.ABC):
     def __init__(self):
         self.width = EDP7IN5_SHAPE[0]
         self.height = EDP7IN5_SHAPE[1]
-        self.screen = None  # PIL Image buffer
 
     @abc.abstractmethod
     def init(self):
@@ -44,7 +41,6 @@ if "armv6l" in platform.uname().machine.lower():
             logging.info("Initializing e-paper display...")
             self.epd.init()
             self.epd.Clear()
-            self.screen = Image.new('1', (self.width, self.height), 1)  # 1=white
 
         def update(self, image: Image.Image):
             logging.info("Updating e-paper display...")
@@ -60,7 +56,6 @@ else:
     class SimScreenDriver(ScreenDriver):
         def __init__(self):
             super().__init__()
-            self.screen = Image.new('1', (self.width, self.height), 1)
 
         def init(self):
             logging.info("Initializing simulated screen...")

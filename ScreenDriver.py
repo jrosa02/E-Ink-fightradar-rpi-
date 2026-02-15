@@ -8,6 +8,9 @@ import logging
 from PIL import Image
 from ScreenRender import EDP7IN5_SHAPE
 
+
+logging.basicConfig(level=logging.DEBUG)
+
 class ScreenDriver(abc.ABC):
     def __init__(self):
         self.width = EDP7IN5_SHAPE[0]
@@ -24,7 +27,7 @@ class ScreenDriver(abc.ABC):
         """Update the screen with a PIL image."""
         pass
 
-if "raspberrypi" in platform.uname().machine.lower():
+if "armv6l" in platform.uname().machine.lower():
     logging.info("Detected Raspberry Pi platform.")
     libdir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'lib')
     if os.path.exists(libdir):

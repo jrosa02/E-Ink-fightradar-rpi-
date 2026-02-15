@@ -43,15 +43,15 @@ class ScreenRender():
 
     def _init_fonts(self, sizes):
         self.DejaVu = {
-            size: ImageFont.truetype("fonts/DejaVuSans.ttf", size=size)
+            size: ImageFont.truetype("./fonts/DejaVuSans.ttf", size=size)
             for size in sizes
         }
         self.DejaVuBold = {
-            size: ImageFont.truetype("fonts/DejaVuSans-Bold.ttf", size=size)
+            size: ImageFont.truetype("./fonts/DejaVuSans-Bold.ttf", size=size)
             for size in sizes
         }
-        self.weather_font = ImageFont.truetype("/home/jrosa/Private/E-Ink-fightradar-rpi-/fonts/easy_weather_icons_font.ttf", size=64)
-        self.weather_font_big = ImageFont.truetype("/home/jrosa/Private/E-Ink-fightradar-rpi-/fonts/easy_weather_icons_font.ttf", size=150)
+        self.weather_font = ImageFont.truetype("./fonts/easy_weather_icons_font.ttf", size=64)
+        self.weather_font_big = ImageFont.truetype("./fonts/easy_weather_icons_font.ttf", size=150)
 
     def _init_background(self, shape):
         return Image.new('1', shape, WHITE)

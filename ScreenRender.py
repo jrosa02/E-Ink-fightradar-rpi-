@@ -12,8 +12,8 @@ from DataFetch import WeatherData
 
 EDP7IN5_SHAPE = (800, 480)
 BND_WIDTH = 0
-BLACK = 1
-WHITE = 0
+BLACK = 0
+WHITE = 1
 
 RRoi = namedtuple("RRoi", ["left", "upper", "right", "lower"])
 
@@ -51,6 +51,7 @@ class ScreenRender():
             for size in sizes
         }
         self.weather_font = ImageFont.truetype("./fonts/easy_weather_icons_font.ttf", size=64)
+        self.weather_font_middle = ImageFont.truetype("./fonts/easy_weather_icons_font.ttf", size=96)
         self.weather_font_big = ImageFont.truetype("./fonts/easy_weather_icons_font.ttf", size=150)
 
     def _init_background(self, shape):
@@ -64,11 +65,11 @@ class ScreenRender():
         
         header_h = 60
         panel_h = 200
-        divider_h = 30
+        divider_h = 40
         footer_y = header_h + panel_h + divider_h
 
         # 2. Normalized Widths (Must sum to 1.0)
-        ratios = [0.35, 0.20, 0.15, 0.10, 0.20]
+        ratios = [0.35, 0.20, 0.20, 0.15, 0.10]
         
         # 3. Calculate X-coordinates (Edges)
         # [0, 0.25, 0.45, 0.60, 0.80, 1.0] * screen_width
@@ -102,7 +103,7 @@ class ScreenRender():
         tasks = [
             (self._render_datetime, RRoi(0, 0, scr_w, header_h)),
             (self._render_current_temperature, temp_roi),
-            (self._render_clouds, clouds_roi),
+            (self._render_weather_icon, clouds_roi),
             (self._render_percipitation, precip_roi),
             (self._render_wind, wind_roi),
             (self._render_humidity, humid_roi),
@@ -119,7 +120,7 @@ class ScreenRender():
     @simple_panel_renderer(width=2)
     def _render_datetime(self, draw: ImageDraw.ImageDraw, data: WeatherData):
         w, h = draw.im.size
-        draw.text((w//2, h//2), f"{data.update_datetime.strftime("%Y-%m-%d %H:%M")}", font=self.DejaVu[24], fill=BLACK, anchor='mm')
+        draw.text((w//2, h//2), f"{data.update_datetime.strftime("%Y-%m-%d %H:%M")}   ({datetime.now().strftime("%H:%M")})", font=self.DejaVuBold[24], fill=BLACK, anchor='mm')
 
     @simple_panel_renderer()
     def _render_current_temperature(self, draw: ImageDraw.ImageDraw, data: WeatherData):
@@ -128,35 +129,37 @@ class ScreenRender():
         draw.text((w//2, 150), f"{int(data.cum_day_weather.temp_c_min)}:{int(data.cum_day_weather.temp_c_max)}°", font=self.DejaVu[48], fill=BLACK, anchor="mt")
 
     @simple_panel_renderer()
-    def _render_clouds(self, draw, data: WeatherData):
-        draw.text((10, 10), self.weather_icon(data.current_weather.weather_code), font=self.weather_font_big, fill=BLACK)
+    def _render_weather_icon(self, draw, data: WeatherData):
+        w, h = draw.im.size
+        draw.text((w//2-10, h//2-15), self.weather_icon(data.current_weather.weather_code), font=self.weather_font_big, fill=BLACK, anchor="mm")
 
     @simple_panel_renderer()
     def _render_percipitation(self, draw: ImageDraw.ImageDraw, data: WeatherData):
-        draw.text((10, 10), f"{int(data.hourly_weathers[0].precipitation)}", font=self.DejaVu[64], fill=BLACK)
-        draw.text((10, 80), f"{int(data.cum_day_weather.precipitation_mm)}", font=self.DejaVu[64], fill=BLACK)
-        draw.text((60, 35), f"\uEA0D", font=self.weather_font, fill=BLACK)
-        draw.text((60, 100), f"mm", font=self.DejaVu[32], fill=BLACK)
+        w, h = draw.im.size
+        draw.text((20, h//5), f"{int(data.hourly_weathers[0].precipitation)}", font=self.DejaVu[64], fill=BLACK, anchor='lm')
+        draw.text((20, int(h*3/5)), f"{int(data.cum_day_weather.precipitation_mm)}", font=self.DejaVu[64], fill=BLACK, anchor='lm')
+        draw.text((60, int(h*2/5)), f"\uEA0D", font=self.weather_font_middle, fill=BLACK, anchor='lm')
+        draw.text((60, h//5-17), f"mm/h", font=self.DejaVu[32], fill=BLACK, anchor='lm')
+        draw.text((60, int(h*3/5)+10), f"mm/d", font=self.DejaVu[32], fill=BLACK, anchor='lm')
 
     @simple_panel_renderer()
     def _render_wind(self, draw: ImageDraw.ImageDraw, data: WeatherData):
         w, h = draw.im.size
         angle_to_arrow = lambda a: ["↓","↙","←","↖","↑","↗","→","↘",][round(a / 45) % 8]
         angle_to_card = lambda a: ["N","NE","E","SE", "S","SW","W","NW"][round(a / 45) % 8]
-        draw.text((w//2, 10), f"{angle_to_arrow(data.current_weather.wind_speed)}", font=self.DejaVu[64], fill=BLACK, anchor='mt')
+        draw.text((w//2, 50), f"{angle_to_arrow(data.current_weather.wind_speed)}", font=self.DejaVu[64], fill=BLACK, anchor='mm')
         draw.text((w//2, 100), f"{angle_to_card(data.current_weather.wind_direction)}", font=self.DejaVu[64], fill=BLACK, anchor='mt')
         
 
     @simple_panel_renderer()
     def _render_humidity(self, draw: ImageDraw.ImageDraw, data: WeatherData):
-        draw.text((10, 10), f"{int(data.cum_day_weather.humidity)}%", font=self.DejaVu[64], fill=BLACK)
-        draw.text((10, 140), f"Moisture", font=self.DejaVu[22], fill=BLACK)
+        draw.text((10, 10), f"{int(data.cum_day_weather.humidity)}%", font=self.DejaVu[64], fill=BLACK, direction='ttb')
 
     @simple_panel_renderer()
     def _render_divider(self, draw: ImageDraw.ImageDraw, data: WeatherData):
         w, h = draw.im.size
         draw.rectangle([0, 0, w, h], fill=BLACK)
-        draw.text((w//2, h//2), "Miejsce na twoją reklamę", font=self.DejaVu[32], fill=WHITE, anchor='mm')
+        draw.text((w//2, h//2), "Donna Mamma es chujoczita", font=self.DejaVu[32], fill=WHITE, anchor='mm')
 
 
     def _render_hourly(self, data: WeatherData, rois: list[RRoi]):
@@ -187,7 +190,7 @@ class ScreenRender():
             # hour label
             draw.text(
                 (w//2, roi_image.height - int(roi_image.height/3.5)),
-                f"{hour:02d}⁰",
+                f"{hour:02d}ʰ",
                 font=self.DejaVu[40],
                 fill=BLACK,
                 anchor="mt"

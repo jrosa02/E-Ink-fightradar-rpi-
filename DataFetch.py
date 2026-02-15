@@ -2,7 +2,6 @@ from collections import namedtuple
 from dataclasses import dataclass, fields
 from typing import Iterable
 import numpy as np
-import pandas as pd
 import asyncio
 import datetime
 

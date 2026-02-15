@@ -1,11 +1,12 @@
 from collections import namedtuple
 from dataclasses import dataclass, fields
 from typing import Iterable
+import numpy as np
 import pandas as pd
 import asyncio
 import datetime
 
-from open_meteo import OpenMeteo, Forecast
+from open_meteo import OpenMeteo, Forecast, CurrentWeather
 from open_meteo.models import DailyParameters, HourlyParameters
 
 
@@ -21,16 +22,106 @@ poland_bbox = BBox(
 
 krakow_loc = LLoc(50.061667, 19.9375)
 
-DHour = namedtuple("DHour", ["datetime", "temp_c", "clouds", "precipitation"])
-DData = namedtuple("nDData", ["update_datetime", "temp", "wind_speed", "wind_direction", "humidity", "sun_times", "hourly"])
+@dataclass()
+class HourlyWeather:
+    datetime_d: datetime.datetime
+    temp_c: float
+    clouds: int
+    precipitation: float
+    weather_code: int
+
+    def __init__(self, forecast: Forecast, datetime_i: datetime.datetime):
+        if forecast.hourly is not None: 
+            hourly_forecast = forecast.hourly
+        else:
+            raise ValueError("hourly_forecast is None")
+        
+        hour_index = hourly_forecast.time.index(datetime_i)
+
+        try:
+            self.datetime_d = datetime_i
+            self.temp_c = hourly_forecast.temperature_2m[hour_index] # pyright: ignore[reportOptionalSubscript]
+            self.clouds = hourly_forecast.cloud_cover[hour_index] # pyright: ignore[reportOptionalSubscript]
+            self.precipitation = hourly_forecast.precipitation[hour_index] # pyright: ignore[reportOptionalSubscript]
+            self.weather_code = hourly_forecast.weather_code[hour_index] # pyright: ignore[reportOptionalSubscript]
+        except (TypeError, IndexError) as e:
+            raise IndexError(f"Error fetching data at {datetime_i}: {e}")
+
+
+@dataclass()
+class CumDayWeather:
+    precipitation_mm: float
+    temp_c_max: float
+    temp_c_min: float
+    humidity: float
+    weather_code: int
+        
+    def __init__(self, forecast: Forecast, datetime_i: datetime.datetime):
+        if forecast.daily is not None: 
+            daily_forecast = forecast.daily
+        else:
+            raise ValueError("daily_forecast is None")
+        
+        if forecast.hourly is not None: 
+            hourly_forecast = forecast.hourly
+        else:
+            raise ValueError("hourly_forecast is None")
+        
+        hour_index_start = hourly_forecast.time.index(datetime_i)
+        hour_index_stop = hour_index_start + 24
+        
+        day_index = 0
+
+        try:
+            self.precipitation_mm = daily_forecast.precipitation_sum[day_index] # pyright: ignore[reportOptionalSubscript]
+            self.temp_c_max = daily_forecast.temperature_2m_max[day_index] # pyright: ignore[reportOptionalSubscript]
+            self.temp_c_min = daily_forecast.temperature_2m_min[day_index] # pyright: ignore[reportOptionalSubscript]
+            self.humidity = np.mean(hourly_forecast.relative_humidity_2m[hour_index_start:hour_index_stop], dtype=float) # pyright: ignore[reportOptionalSubscript]
+            self.weather_code = daily_forecast.weathercode[day_index] # pyright: ignore[reportOptionalSubscript]
+        except (TypeError, IndexError) as e:
+            raise IndexError(f"Error fetching data at {datetime_i}: {e}")
+
+@dataclass
+class WeatherData:
+    update_datetime: datetime.datetime
+    current_weather: CurrentWeather
+    suntimes: tuple[datetime.datetime, datetime.datetime]
+    hourly_weathers: list[HourlyWeather]
+    cum_day_weather: CumDayWeather
+
+    def __init__(self, forecast: Forecast, datetime_i: datetime.datetime):
+        if forecast.current_weather is None:
+            raise ValueError("forecast.current_weather  is None")
+        if forecast.daily is None or forecast.daily.sunrise is None:
+            raise ValueError("forecast.daily.sunrise is None")
+        if forecast.daily is None or forecast.daily.sunset is None:
+            raise ValueError("forecast.daily.sunset is None")
+
+        self.update_datetime = datetime_i
+        self.current_weather = forecast.current_weather
+        self.suntimes = forecast.daily.sunrise[0], forecast.daily.sunset[0]
+        self.hourly_weathers = [HourlyWeather(forecast, datetime_i+datetime.timedelta(hours=h)) for h in range(12)]
+        self.cum_day_weather = CumDayWeather(forecast, datetime_i)
+
+    def __repr__(self) -> str:
+        hourly_formatted = "".join([f"\n\t{h}" for h in self.hourly_weathers])
+
+        return (
+            f"DData(\n"
+            f"  {self.current_weather}\n"
+            f"  Suntimes={self.suntimes}\n"
+            f"  cum_day={self.cum_day_weather}\n"
+            f"  hourly=[{hourly_formatted}\n  ]\n"
+            f")"
+        )
 
 class DataFetch():
     def __init__(self) -> None:
         pass
 
-    async def getOpenMeteoData(self):
+    async def getOpenMeteoData(self) -> Forecast:
         async with OpenMeteo() as open_meteo:
-            forecast = await open_meteo.forecast(
+            forecast: Forecast = await open_meteo.forecast(
                 latitude=krakow_loc.lat,
                 longitude=krakow_loc.lon,
                 current_weather=True,
@@ -40,55 +131,25 @@ class DataFetch():
                     HourlyParameters.WIND_DIRECTION_10M,
                     HourlyParameters.PRECIPITATION,
                     HourlyParameters.CLOUD_COVER,
-                    HourlyParameters.RELATIVE_HUMIDITY_2M
+                    HourlyParameters.RELATIVE_HUMIDITY_2M,
+                    HourlyParameters.WEATHER_CODE
                 ],
                 daily=[
                     DailyParameters.SUNRISE,
-                    DailyParameters.SUNSET
+                    DailyParameters.SUNSET,
+                    DailyParameters.WEATHER_CODE,
+                    DailyParameters.TEMPERATURE_2M_MAX,
+                    DailyParameters.TEMPERATURE_2M_MIN,
+                    DailyParameters.PRECIPITATION_SUM
                 ]
             )
         return forecast
 
-    @staticmethod
-    def forecast_to_hourly_list(dc: object, i: int) -> list[DHour]:
-        field_names = [f.name for f in fields(dc)]
-        columns = [getattr(dc, name) for name in field_names]
-        print(dc.time)
-
-        def pack_row(idx: int) -> DHour:
-            row = {name: col[idx] if isinstance(col, Iterable)else 0 for name, col in zip(field_names, columns)}
-            return DHour(
-                datetime=row["time"],
-                temp_c=row["temperature_2m"],
-                clouds=row["cloud_cover"],
-                precipitation=row["precipitation"],
-            )
-
-        return [pack_row(idx) for idx in range(i)]
-
-    def populate_tuple(self, forecast: Forecast):
-        for_datetime = forecast.current_weather.time
-        temp = forecast.current_weather.temperature
-        wind_dir = forecast.current_weather.wind_direction
-        wind_speed = forecast.current_weather.wind_speed
-        humidity = forecast.hourly.relative_humidity_2m[0]
-        sunrise = forecast.daily.sunrise[0]
-        sunset = forecast.daily.sunset[0]
-
-        ddata = DData(
-            update_datetime=datetime.datetime.now(),
-            temp=temp,
-            wind_direction=wind_dir,
-            wind_speed=wind_speed,
-            humidity=humidity,
-            sun_times=(sunrise, sunset),
-            hourly=self.forecast_to_hourly_list(forecast.hourly, 12)
-        )
-        return ddata
-
     def __call__(self):
         forecast = asyncio.run(self.getOpenMeteoData())
-        return self.populate_tuple(forecast)
+        datetime_i = datetime.datetime.now()
+        datetime_i = datetime_i.replace(minute=0, second=0, microsecond=0)
+        return WeatherData(forecast, datetime_i)
 
 
 if __name__ == "__main__":

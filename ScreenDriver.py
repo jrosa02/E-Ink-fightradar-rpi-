@@ -66,6 +66,7 @@ else:
             logging.info("Updating simulated screen...")
             plt.imshow(image, cmap='gray')
             plt.show()
+                
 
 # Factory function to decide which driver to use at runtime
 def get_screen_driver() -> ScreenDriver:

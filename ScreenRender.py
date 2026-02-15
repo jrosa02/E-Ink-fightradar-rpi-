@@ -4,18 +4,20 @@ from collections import namedtuple
 import copy
 import numpy as np
 from datetime import datetime
+from itertools import accumulate
 
 import logging
 from PIL import Image,ImageDraw,ImageColor, ImageFont
-from DataFetch import DData
+from DataFetch import WeatherData
 
 EDP7IN5_SHAPE = (800, 480)
-BND_WIDTH = 0
-BLACK = 0
+BND_WIDTH = 1
+BLACK = 1
+WHITE = 0
 
-RRoi = namedtuple("BBox", ["left", "upper", "right", "lower"])
+RRoi = namedtuple("RRoi", ["left", "upper", "right", "lower"])
 
-def simple_panel_renderer(fill=1, outline=BLACK, width=BND_WIDTH):
+def simple_panel_renderer(fill=WHITE, outline=BLACK, width=BND_WIDTH):
     def decorator(func):
         def wrapper(self, roi_image, data, offset, *args, **kwargs):
             draw = ImageDraw.Draw(roi_image)
@@ -44,76 +46,121 @@ class ScreenRender():
             size: ImageFont.truetype("fonts/DejaVuSans.ttf", size=size)
             for size in sizes
         }
+        self.DejaVuBold = {
+            size: ImageFont.truetype("fonts/DejaVuSans-Bold.ttf", size=size)
+            for size in sizes
+        }
         self.weather_font = ImageFont.truetype("/home/jrosa/Private/E-Ink-fightradar-rpi-/fonts/easy_weather_icons_font.ttf", size=64)
         self.weather_font_big = ImageFont.truetype("/home/jrosa/Private/E-Ink-fightradar-rpi-/fonts/easy_weather_icons_font.ttf", size=150)
 
     def _init_background(self, shape):
-        return Image.new('1', shape, 255)
+        return Image.new('1', shape, WHITE)
 
-    def render_parcels(self, data: DData):
-        """
-        Main function to render all modules.
-        """
-        big_panel_width = 160
-        big_panel_hight = 180
-        # Define ROIs: (left, upper, right, lower)
-        datetime_roi = RRoi(0, 0, 800, 60)
-        temp_roi = RRoi(0, 60, big_panel_width, 60+big_panel_hight)
-        clouds_roi = RRoi(big_panel_width, 60, 2*big_panel_width, 60+big_panel_hight)
-        precipitation_roi = RRoi(2*big_panel_width, 60, 3*big_panel_width, 60+big_panel_hight)
-        wind_roi = RRoi(3*big_panel_width, 60, 4*big_panel_width, 60+big_panel_hight)
-        moisture_roi = RRoi(4*big_panel_width, 60, 5*big_panel_width, 60+big_panel_hight)
-        hour_count = 6
-        hour_width = EDP7IN5_SHAPE[0]//hour_count
-        # Define hourly ROIs: (left, upper, right, lower)
-        hourly_rois = [RRoi(i*hour_width,60+big_panel_hight, (i+1)*hour_width, EDP7IN5_SHAPE[1]) for i in range(hour_count)]
+    def render_parcels(self, data: WeatherData):
+        # 1. Dimensions - Ensure we have the correct Width vs Height
+        # Typically: Index 1 is Width (800), Index 0 is Height (480)
+        scr_w = EDP7IN5_SHAPE[0]
+        scr_h = EDP7IN5_SHAPE[1]
+        
+        header_h = 60
+        panel_h = 200
+        divider_h = 30
+        footer_y = header_h + panel_h + divider_h
 
-        # Render each module
-        self._render_datetime(self.screen.crop(datetime_roi), data, datetime_roi[:2])
-        self._render_current_temperature(self.screen.crop(temp_roi), data, temp_roi[:2])
-        self._render_clouds(self.screen.crop(clouds_roi), data, clouds_roi[:2])
-        self._render_wind(self.screen.crop(wind_roi), data, wind_roi[:2])
-        self._render_percipitation(self.screen.crop(precipitation_roi), data, precipitation_roi[:2])
-        self._render_humidity(self.screen.crop(moisture_roi), data, moisture_roi[:2])
+        # 2. Normalized Widths (Must sum to 1.0)
+        ratios = [0.35, 0.20, 0.15, 0.15, 0.15]
+        
+        # 3. Calculate X-coordinates (Edges)
+        # [0, 0.25, 0.45, 0.60, 0.80, 1.0] * screen_width
+        edges = [0] + list(accumulate(ratios))
+        x_coords = [int(e * scr_w) for e in edges]
+        
+        # Ensure the last pixel is exactly the screen edge to avoid rounding gaps
+        x_coords[-1] = scr_w
+
+        # 4. Generate Main ROIs by pairing adjacent x-coordinates
+        # This guarantees 'right' is always >= 'left'
+        main_rois = [
+            RRoi(x_coords[i], header_h, x_coords[i+1], footer_y)
+            for i in range(len(ratios))
+        ]
+
+        divider_roi = RRoi(0, header_h+panel_h, scr_w, footer_y)
+
+        # 5. Hourly ROIs
+        hour_count = 10
+        h_step = scr_w // hour_count
+        hourly_rois = [
+            RRoi(i * h_step, footer_y, (i + 1) * h_step, scr_h)
+            for i in range(hour_count)
+        ]
+
+        # 6. Render Mapping
+        # Unpack main_rois into the specific modules
+        temp_roi, clouds_roi, precip_roi, wind_roi, humid_roi = main_rois
+
+        tasks = [
+            (self._render_datetime, RRoi(0, 0, scr_w, header_h)),
+            (self._render_current_temperature, temp_roi),
+            (self._render_clouds, clouds_roi),
+            (self._render_percipitation, precip_roi),
+            (self._render_wind, wind_roi),
+            (self._render_humidity, humid_roi),
+            (self._render_divider, divider_roi)
+        ]
+
+        for func, roi in tasks:
+            # Debug print if you still encounter issues:
+            # print(f"Rendering {func.__name__} at {roi}")
+            func(self.screen.crop(roi), data, roi[:2])
 
         self._render_hourly(data, hourly_rois)
 
-    @simple_panel_renderer()
-    def _render_datetime(self, draw, data: DData):
+    @simple_panel_renderer(width=2)
+    def _render_datetime(self, draw: ImageDraw.ImageDraw, data: WeatherData):
         draw.text((300, 15), f"{data.update_datetime.strftime("%Y-%m-%d %H:%M")}", font=self.DejaVu[24], fill=BLACK, align="center")
 
     @simple_panel_renderer()
-    def _render_current_temperature(self, draw, data: DData):
-        draw.text((10, 10), f"{data.temp:.0f}°", font=self.DejaVu[110], fill=BLACK)
+    def _render_current_temperature(self, draw: ImageDraw.ImageDraw, data: WeatherData):
+        w, h = draw.im.size
+        draw.text((w//2, 30), f"{int(data.current_weather.temperature-20)}°", font=self.DejaVuBold[110], fill=BLACK, anchor="mt")
+        draw.text((w//2, 150), f"{int(data.cum_day_weather.temp_c_min)}:{int(data.cum_day_weather.temp_c_max)}°", font=self.DejaVu[48], fill=BLACK, anchor="mt")
 
     @simple_panel_renderer()
-    def _render_clouds(self, draw, data: DData):
-        draw.text((10, 10), self.weather_icon(data.hourly[0].clouds), font=self.weather_font_big, fill=BLACK)
+    def _render_clouds(self, draw, data: WeatherData):
+        draw.text((10, 10), self.weather_icon(data.current_weather.weather_code), font=self.weather_font_big, fill=BLACK)
 
     @simple_panel_renderer()
-    def _render_percipitation(self, draw, data: DData):
-        draw.text((10, 10), f"{int(data.hourly[0].precipitation)}", font=self.DejaVu[110], fill=BLACK)
+    def _render_percipitation(self, draw: ImageDraw.ImageDraw, data: WeatherData):
+        draw.text((10, 10), f"{int(data.hourly_weathers[0].precipitation)}", font=self.DejaVu[64], fill=BLACK)
+        draw.text((10, 80), f"{int(data.cum_day_weather.precipitation_mm)}", font=self.DejaVu[64], fill=BLACK)
+        draw.text((60, 35), f"\uEA0D", font=self.weather_font, fill=BLACK)
+        draw.text((60, 100), f"mm", font=self.DejaVu[32], fill=BLACK)
 
     @simple_panel_renderer()
-    def _render_wind(self, draw, data: DData):
+    def _render_wind(self, draw: ImageDraw.ImageDraw, data: WeatherData):
         angle_to_arrow = lambda a: ["↑","↗","→","↘","↓","↙","←","↖"][-round(a / 45) % 8]
         angle_to_card = lambda a: ["S","SW","W","NW","N","NE","E","SE"][-round(a / 45) % 8]
-        draw.text((50, 10), f"{angle_to_arrow(data.wind_direction)}", font=self.DejaVu[64], fill=BLACK)
-        draw.text((50, 100), f"{angle_to_card(data.wind_direction)}", font=self.DejaVu[64], fill=BLACK)
+        draw.text((50, 10), f"{angle_to_arrow(data.current_weather.wind_speed)}", font=self.DejaVu[64], fill=BLACK)
+        draw.text((50, 100), f"{angle_to_card(data.current_weather.wind_direction)}", font=self.DejaVu[64], fill=BLACK)
+        
 
     @simple_panel_renderer()
-    def _render_humidity(self, draw, data: DData):
-        draw.text((10, 10), f"{data.humidity}%", font=self.DejaVu[64], fill=BLACK)
+    def _render_humidity(self, draw: ImageDraw.ImageDraw, data: WeatherData):
+        draw.text((10, 10), f"{int(data.cum_day_weather.humidity)}%", font=self.DejaVu[64], fill=BLACK)
         draw.text((10, 140), f"Moisture", font=self.DejaVu[22], fill=BLACK)
 
+    @simple_panel_renderer()
+    def _render_divider(self, draw: ImageDraw.ImageDraw, data: WeatherData):
+        w, h = draw.im.size
+        draw.rectangle([0, 0, w, h], fill=BLACK)
+        draw.text((w//2, h//2), "DUPAAAAAA", font=self.DejaVu[32], fill=WHITE, anchor='mm')
 
-    def _render_hourly(self, data: DData, rois: list[RRoi]):
 
-        def hr2_mean(seq, i, par, dtype=int):
-            return np.mean([getattr(seq[i], par), getattr(seq[i+1], par)], dtype=dtype)
+    def _render_hourly(self, data: WeatherData, rois: list[RRoi]):
 
         for i, roi in enumerate(rois):
-            hour = data.hourly[2*i].datetime.hour
+            hour = data.hourly_weathers[i].datetime_d.hour+1
 
             # create ROI image from screen
             roi_image = self.screen.crop((roi.left, roi.upper, roi.right, roi.lower))
@@ -130,85 +177,58 @@ class ScreenRender():
                     roi_image.height - BND_WIDTH // 2,
                 ],
                 outline=BLACK,
-                fill=1,
+                fill=WHITE,
                 width=BND_WIDTH,
             )
 
+            w, h = draw.im.size
             # hour label
             draw.text(
-                (20, roi_image.height - 60),
-                f"{hour:02d}⁰⁰",
+                (w//2, roi_image.height - int(roi_image.height/3.5)),
+                f"{hour:02d}⁰",
                 font=self.DejaVu[40],
                 fill=BLACK,
+                anchor="mt"
             )
 
-            cloud_pct = hr2_mean(data.hourly, 2*i, "clouds", dtype=int)
-            precipitation = hr2_mean(data.hourly, 2*i, "precipitation", dtype=int)
-            temp_c = hr2_mean(data.hourly, 2*i, "temp_c", dtype=int)
+            temp_c = int(data.hourly_weathers[i].temp_c)
 
-            weather_symbol = self.weather_icon(cloud_pct, precipitation, temp_c, data.hourly[i].datetime, data.sun_times[0], data.sun_times[1])
-            draw.text((roi_image.width // 2, 60), weather_symbol, font=self.weather_font)
+            weather_symbol = self.weather_icon(data.hourly_weathers[i].weather_code)
+            draw.text((w//2, roi_image.height//10), weather_symbol, font=self.weather_font, fill=BLACK, anchor="mt")
             draw.text(
-                (50, roi_image.height//2),
+                (w//2, int(roi_image.height/2.1)),
                 f"{temp_c:d}°",
                 font=self.DejaVu[40],
                 fill=BLACK,
+                anchor="mt"
             )
 
             # paste back
             self.screen.paste(roi_image, (roi.left, roi.upper))
-    
+
     @staticmethod
     def weather_icon(
-        cloud_pct: float,
-        precipitation_mm: float|None = None,
-        temp_c: float|None = None,
-        now: datetime|None = None,
-        sunrise: datetime|None = None,
-        sunset: datetime|None = None
+        wmo: int,
+        now: datetime | None = None,
+        sunrise: datetime | None = None,
+        sunset: datetime | None = None
     ) -> str:
+        # 1. Day/Night index (0 = Day, 1 = Night)
+        is_night = now and sunrise and sunset and not (sunrise <= now <= sunset)
+        idx = 1 if is_night else 0
 
-        # ---------- day/night ----------
-        if now is None or sunrise is None or sunset is None:
-            night = False
-        else:
-            night = not (sunrise <= now <= sunset)
-
-        # ---------- condition classification ----------
-        if precipitation_mm is not None and precipitation_mm > 0:
-            if temp_c is not None and temp_c <= 0:
-                condition = "snow"
-            elif precipitation_mm > 10:
-                condition = "heavy_rain"
-            else:
-                condition = "rain"
-        else:
-            if cloud_pct <= 10:
-                condition = "clear"
-            elif cloud_pct <= 30:
-                condition = "few_clouds"
-            elif cloud_pct <= 60:
-                condition = "scattered"
-            elif cloud_pct <= 85:
-                condition = "broken"
-            else:
-                condition = "overcast"
-
-        # ---------- icon map (subset of font glyphs) ----------
-        icons = {
-            "clear":        ("\uE96D", "\uE96E"),
-            "few_clouds":   ("\uE967", "\uE968"),
-            "scattered":    ("\uE9D3", "\uE9D4"),
-            "broken":       ("\uE9DF", "\uE9E0"),
-            "overcast":     ("\uE961", "\uE962"),
-            "rain":         ("\uE92E", "\uE932"),
-            "heavy_rain":   ("\uE931", "\uE931"),
-            "snow":         ("\uE940", "\uE941"),
-            "wind":         ("\uE900", "\uE900"),  # fallback / generic
-        }
-
-        day_icon, night_icon = icons.get(condition, ("\uE900", "\uE900"))
-        return night_icon if night else day_icon
+        # 2. WMO to Font Glyph Mapping (\uE9xx range)
+        match wmo:
+            case 0:                             return ("\uE96D", "\u263E")[idx] # Clear (Sun/Moon)
+            case 1 | 2:                         return ("\uE967", "\uE968")[idx] # Few Clouds
+            case 3:                             return ("\uE961", "\uE962")[idx] # Overcast
+            case 45 | 48:                       return ("\uE901", "\uE901")[idx] # Fog
+            case 51 | 53 | 55:                  return ("\uE92E", "\uE932")[idx] # Drizzle
+            case 61 | 63 | 80 | 81:             return ("\uE92E", "\uE932")[idx] # Rain
+            case 65 | 82:                       return ("\uE931", "\uE931")[idx] # Heavy Rain
+            case 71 | 73 | 75 | 77 | 85 | 86:   return ("\uE940", "\uE941")[idx] # Snow
+            case _ if wmo >= 95:                return ("\uE950", "\uE950")[idx] # Thunderstorm
+            case _:                             return ("\uE900", "\uE900")[idx] # Fallback (Wind/Generic)
 
     def reset_screen(self):
         self.screen = copy.copy(self.const_background)
@@ -217,7 +237,7 @@ class ScreenRender():
         # PIL
         self.screen.show()
 
-    def __call__(self, ddata:DData):
+    def __call__(self, ddata:WeatherData):
         self.reset_screen()
         self.render_parcels(ddata)
         return self.get_outputimage()

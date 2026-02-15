@@ -74,7 +74,7 @@ else:
 
 # Factory function to decide which driver to use at runtime
 def get_screen_driver() -> ScreenDriver:
-    if "raspberrypi" in platform.uname().machine.lower():
+    if "armv6l" in platform.uname().machine.lower():
         logging.info("Detected Raspberry Pi: using e-paper driver")
         return EpdScreenDriver()
     else:

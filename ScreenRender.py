@@ -9,9 +9,10 @@ from itertools import accumulate
 import logging
 from PIL import Image,ImageDraw,ImageColor, ImageFont
 from DataFetch import WeatherData
+from texts import TextsSelector
 
 EDP7IN5_SHAPE = (800, 480)
-BND_WIDTH = 0
+BND_WIDTH = 1
 BLACK = 0
 WHITE = 1
 
@@ -39,7 +40,8 @@ class ScreenRender():
     def __init__(self, shape=EDP7IN5_SHAPE) -> None: 
         self.const_background = self._init_background(shape)
         self.screen = copy.copy(self.const_background)
-        self._init_fonts([16, 22, 24, 32, 40, 48, 64, 110])
+        self._init_fonts([11, 12, 16, 22, 24, 32, 40, 48, 64, 110])
+        self.text_selector = iter(TextsSelector(False))
 
     def _init_fonts(self, sizes):
         self.DejaVu = {
@@ -126,28 +128,28 @@ class ScreenRender():
     def _render_current_temperature(self, draw: ImageDraw.ImageDraw, data: WeatherData):
         w, h = draw.im.size
         draw.text((w//2, 30), f"{int(data.current_weather.temperature)}°", font=self.DejaVuBold[110], fill=BLACK, anchor="mt")
-        draw.text((w//2, 150), f"{int(data.cum_day_weather.temp_c_min)}:{int(data.cum_day_weather.temp_c_max)}°", font=self.DejaVu[48], fill=BLACK, anchor="mt")
+        draw.text((w//2, 150), f"{int(data.cum_day_weather.temp_c_min)}° : {int(data.cum_day_weather.temp_c_max)}°", font=self.DejaVu[48], fill=BLACK, anchor="mt")
 
     @simple_panel_renderer()
     def _render_weather_icon(self, draw, data: WeatherData):
         w, h = draw.im.size
-        draw.text((w//2-10, h//2-15), self.weather_icon(data.current_weather.weather_code), font=self.weather_font_big, fill=BLACK, anchor="mm")
+        draw.text((w//2, h//2-15), self.weather_icon(data.current_weather.weather_code), font=self.weather_font_big, fill=BLACK, anchor="mm")
 
     @simple_panel_renderer()
     def _render_percipitation(self, draw: ImageDraw.ImageDraw, data: WeatherData):
         w, h = draw.im.size
-        draw.text((20, h//5), f"{int(data.hourly_weathers[0].precipitation)}", font=self.DejaVu[64], fill=BLACK, anchor='lm')
-        draw.text((20, int(h*3/5)), f"{int(data.cum_day_weather.precipitation_mm)}", font=self.DejaVu[64], fill=BLACK, anchor='lm')
-        draw.text((60, int(h*2/5)), f"\uEA0D", font=self.weather_font_middle, fill=BLACK, anchor='lm')
-        draw.text((60, h//5-17), f"mm/h", font=self.DejaVu[32], fill=BLACK, anchor='lm')
-        draw.text((60, int(h*3/5)+10), f"mm/d", font=self.DejaVu[32], fill=BLACK, anchor='lm')
+        draw.text((10, int(h*2/5)), f"{10+int(data.hourly_weathers[0].precipitation)}", font=self.DejaVu[64], fill=BLACK, anchor='lb')
+        draw.text((10, int(h*3/4)), f"{int(data.cum_day_weather.precipitation_mm)}", font=self.DejaVu[64], fill=BLACK, anchor='lb')
+        draw.rectangle((10, int(h*2/5)+15, w-10, int(h*2/5)+25), fill=BLACK, outline=BLACK)
+        draw.text((w-10, int(h*2/5)), f"mm/h", font=self.DejaVu[16], fill=BLACK, anchor='rb')
+        draw.text((w-10, int(h*3/4)), f"mm/d", font=self.DejaVu[16], fill=BLACK, anchor='rb')
 
     @simple_panel_renderer()
     def _render_wind(self, draw: ImageDraw.ImageDraw, data: WeatherData):
         w, h = draw.im.size
         angle_to_arrow = lambda a: ["↓","↙","←","↖","↑","↗","→","↘",][round(a / 45) % 8]
         angle_to_card = lambda a: ["N","NE","E","SE", "S","SW","W","NW"][round(a / 45) % 8]
-        draw.text((w//2, 50), f"{angle_to_arrow(data.current_weather.wind_speed)}", font=self.DejaVu[64], fill=BLACK, anchor='mm')
+        draw.text((w//2, 50), f"{angle_to_arrow(data.current_weather.wind_direction)}", font=self.DejaVu[64], fill=BLACK, anchor='mm')
         draw.text((w//2, 100), f"{angle_to_card(data.current_weather.wind_direction)}", font=self.DejaVu[64], fill=BLACK, anchor='mt')
         
 
@@ -159,8 +161,15 @@ class ScreenRender():
     def _render_divider(self, draw: ImageDraw.ImageDraw, data: WeatherData):
         w, h = draw.im.size
         draw.rectangle([0, 0, w, h], fill=BLACK)
-        draw.text((w//2, h//2), "Donna Mamma es chujoczita", font=self.DejaVu[32], fill=WHITE, anchor='mm')
+        text = next(self.text_selector)
+        text_size = self.get_text_size(text)
+        draw.text((w//2, h//2), text, font=self.DejaVu[text_size], fill=WHITE, anchor='mm')
 
+    @staticmethod
+    def get_text_size(text: str):
+        lines = text.split('\n')
+        lines_nr = len(lines)
+        return 22//lines_nr
 
     def _render_hourly(self, data: WeatherData, rois: list[RRoi]):
 

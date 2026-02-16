@@ -31,7 +31,7 @@ def main():
             screen.update(img)
             
             log.info("Update complete. Sleeping for 60 seconds.")
-            time.sleep(60)
+            time.sleep(5)
             
         except KeyboardInterrupt:
             log.warning("Application stopped by user (Ctrl+C).")

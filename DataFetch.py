@@ -1,16 +1,18 @@
 from collections import namedtuple
-from dataclasses import dataclass, fields
-from typing import Iterable
+from dataclasses import dataclass
+import logging
 import numpy as np
 import asyncio
 import datetime
 
-from open_meteo import OpenMeteo, Forecast, CurrentWeather
+from open_meteo import OpenMeteo, Forecast, CurrentWeather, OpenMeteoConnectionError
 from open_meteo.models import DailyParameters, HourlyParameters
 
 
 BBox = namedtuple("BBox", ["min_lon", "min_lat", "max_lon", "max_lat"])
 LLoc = namedtuple("LLoc", ["lat", "lon"])
+
+log = logging.getLogger(__name__)
 
 poland_bbox = BBox(
     min_lon=14.07,
@@ -145,9 +147,24 @@ class DataFetch():
         return forecast
 
     def __call__(self):
-        forecast = asyncio.run(self.getOpenMeteoData())
-        datetime_i = datetime.datetime.now()
-        datetime_i = datetime_i.replace(minute=0, second=0, microsecond=0)
+        forecast = None
+        datetime_i = datetime.datetime.today()
+        try:
+            forecast = asyncio.run(self.getOpenMeteoData())
+            self.forecast = forecast
+            datetime_i = datetime.datetime.now()
+            datetime_i = datetime_i.replace(minute=0, second=0, microsecond=0)
+
+        except OpenMeteoConnectionError as e:
+            log.error("Failed to connect to OpenMeteo API: {e}", exc_info=True)
+            
+        if self.forecast is None:
+            log.critical("No forecast data available. Exiting application.")
+            raise
+        elif forecast is None:
+            forecast = self.forecast
+        
+
         return WeatherData(forecast, datetime_i)
 
 

@@ -5,7 +5,7 @@ from ScreenRender import ScreenRender
 from ScreenDriver import get_screen_driver
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
+log.setLevel(logging.WARN)
 
 def main():
     log.info("Starting Weather Station application...")

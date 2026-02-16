@@ -12,7 +12,7 @@ from DataFetch import WeatherData
 from texts import TextsSelector
 
 EDP7IN5_SHAPE = (800, 480)
-BND_WIDTH = 1
+BND_WIDTH = 0
 BLACK = 0
 WHITE = 1
 

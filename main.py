@@ -43,4 +43,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import time
+    while True:
+        main()  # your existing function
+        time.sleep(60)  # sleep between iterations

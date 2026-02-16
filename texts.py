@@ -16,8 +16,9 @@ kapitan_bomba_cytaty = [
     "Jeżeli chodzi o dziewczynki, to można powiedzieć, że jestem jaroszem.",
     "Panie kapitanie, a co by pan zrobił, gdyby się pan dowiedział, \nże pana siostra opierdala kiełbachy kosmitom?",
     "Donna mamma es chujoczita",
-    "Matka była mi jak brat, a jak zabijesz brata to jakbyś zabił matkę"
+    "Matka była mi jak brat, a jak zabijesz brata to jakbyś zabił matkę",
 ]
+
 
 class TextsSelector(Iterable):
     def __init__(self, ifrandom: bool) -> None:
@@ -32,4 +33,3 @@ class TextsSelector(Iterable):
 
     def __next__(self):
         return random.choice(self.texts)
-    

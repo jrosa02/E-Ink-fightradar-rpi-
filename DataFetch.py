@@ -23,6 +23,7 @@ poland_bbox = BBox(
 
 krakow_loc = LLoc(50.061667, 19.9375)
 
+
 @dataclass()
 class HourlyWeather:
     datetime_d: datetime.datetime
@@ -32,11 +33,11 @@ class HourlyWeather:
     weather_code: int
 
     def __init__(self, forecast: Forecast, datetime_i: datetime.datetime):
-        if forecast.hourly is not None: 
+        if forecast.hourly is not None:
             hourly_forecast = forecast.hourly
         else:
             raise ValueError("hourly_forecast is None")
-        
+
         hour_index = hourly_forecast.time.index(datetime_i)
 
         try:
@@ -56,21 +57,21 @@ class CumDayWeather:
     temp_c_min: float
     humidity: float
     weather_code: int
-        
+
     def __init__(self, forecast: Forecast, datetime_i: datetime.datetime):
-        if forecast.daily is not None: 
+        if forecast.daily is not None:
             daily_forecast = forecast.daily
         else:
             raise ValueError("daily_forecast is None")
-        
-        if forecast.hourly is not None: 
+
+        if forecast.hourly is not None:
             hourly_forecast = forecast.hourly
         else:
             raise ValueError("hourly_forecast is None")
-        
+
         hour_index_start = hourly_forecast.time.index(datetime_i)
         hour_index_stop = hour_index_start + 24
-        
+
         day_index = 0
 
         try:
@@ -81,6 +82,7 @@ class CumDayWeather:
             self.weather_code = daily_forecast.weathercode[day_index] # pyright: ignore[reportOptionalSubscript]
         except (TypeError, IndexError) as e:
             raise IndexError(f"Error fetching data at {datetime_i}: {e}")
+
 
 @dataclass
 class WeatherData:
@@ -101,7 +103,10 @@ class WeatherData:
         self.update_datetime = datetime_i
         self.current_weather = forecast.current_weather
         self.suntimes = forecast.daily.sunrise[0], forecast.daily.sunset[0]
-        self.hourly_weathers = [HourlyWeather(forecast, datetime_i+datetime.timedelta(hours=h)) for h in range(12)]
+        self.hourly_weathers = [
+            HourlyWeather(forecast, datetime_i + datetime.timedelta(hours=h))
+            for h in range(12)
+        ]
         self.cum_day_weather = CumDayWeather(forecast, datetime_i)
 
     def __repr__(self) -> str:
@@ -116,7 +121,8 @@ class WeatherData:
             f")"
         )
 
-class DataFetch():
+
+class DataFetch:
     def __init__(self) -> None:
         pass
 
@@ -133,7 +139,7 @@ class DataFetch():
                     HourlyParameters.PRECIPITATION,
                     HourlyParameters.CLOUD_COVER,
                     HourlyParameters.RELATIVE_HUMIDITY_2M,
-                    HourlyParameters.WEATHER_CODE
+                    HourlyParameters.WEATHER_CODE,
                 ],
                 daily=[
                     DailyParameters.SUNRISE,
@@ -141,8 +147,8 @@ class DataFetch():
                     DailyParameters.WEATHER_CODE,
                     DailyParameters.TEMPERATURE_2M_MAX,
                     DailyParameters.TEMPERATURE_2M_MIN,
-                    DailyParameters.PRECIPITATION_SUM
-                ]
+                    DailyParameters.PRECIPITATION_SUM,
+                ],
             )
         return forecast
 
@@ -157,13 +163,12 @@ class DataFetch():
 
         except OpenMeteoConnectionError as e:
             log.error("Failed to connect to OpenMeteo API: {e}", exc_info=True)
-            
+
         if self.forecast is None:
             log.critical("No forecast data available. Exiting application.")
             raise
         elif forecast is None:
             forecast = self.forecast
-        
 
         return WeatherData(forecast, datetime_i)
 

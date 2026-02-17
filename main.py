@@ -4,46 +4,70 @@ import logging
 from DataFetch import DataFetch, poland_bbox
 from ScreenRender import ScreenRender
 from ScreenDriver import get_screen_driver
+import asyncio
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
+log.setLevel(logging.DEBUG)
 handler = RotatingFileHandler("./app_log.log", maxBytes=5 * 1024 * 1024, backupCount=3)
+formatter = logging.Formatter(
+    '%(asctime)s | %(levelname)-8s | %(filename)s:%(lineno)d | %(funcName)s | %(message)s'
+)
+handler.setFormatter(formatter)
 log.addHandler(handler)
 
+UPDATE_PERIOD_S = 5 # 15 minutes in seconds
 
-def main():
-    log.info("Starting Weather Station application...")
-
-    try:
-        dtf = DataFetch()
-        scrr = ScreenRender()
-        screen = get_screen_driver()
-        log.info("Initialization successful.")
-    except Exception as e:
-        log.critical(f"Failed to initialize components: {e}", exc_info=True)
-        return
-
+async def weather_producer(queue):
+    dtf = DataFetch()
     while True:
         try:
-            log.info("Fetching new weather data...")
-            data = dtf()
+            log.debug("Producer: Fetching new weather data...")
+            data = await dtf() # If this is a network call, ideally it should be awaited
+            
+            # Put data in queue. If queue is full, this waits.
+            await queue.put(data)
+            log.debug(f"Producer: Data sent to queue. Sleeping {UPDATE_PERIOD_S//60}m.")
+            
+            await asyncio.sleep(UPDATE_PERIOD_S) 
+        except Exception as e:
+            log.error(f"Producer Error: {e}")
+            await asyncio.sleep(60)
 
-            log.info("Rendering screen layout...")
+async def weather_display(queue):
+    """Task 2: Waits for data from the queue and updates the screen."""
+    scrr = ScreenRender()
+    screen = get_screen_driver()
+    
+    while True:
+        # This line "pauses" the coroutine until there is something in the queue
+        data = await queue.get()
+        
+        try:
+            log.debug("Consumer: Data received. Rendering...")
             img = scrr(data)
-
-            log.info("Updating E-Ink display...")
+            log.debug("Image generated. Updating display...")
             screen.update(img)
+            log.debug("Consumer: Display updated.")
+        except Exception as e:
+            log.error(f"Consumer Error: {e.__class__.__name__}")
+        finally:
+            # Tell the queue the task is done
+            queue.task_done()
 
-            log.info("Update complete. Sleeping for 60 seconds.")
-            time.sleep(900)
+async def main():
+    # Create a queue with a max size of 1 to avoid "backlogging" old weather data
+    queue = asyncio.Queue(maxsize=1)
 
-        except KeyboardInterrupt:
-            log.warning("Application stopped by user (Ctrl+C).")
-            break
+    log.info("Starting Weather Station...")
 
+    # Run both tasks concurrently
+    await asyncio.gather(
+        weather_producer(queue),
+        weather_display(queue)
+    )
 
 if __name__ == "__main__":
-    import time
-    while True:
-        main()  # your existing function
-        time.sleep(60)  # sleep between iterations
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        log.warning("Application stopped by user.")

@@ -45,7 +45,7 @@ class ScreenRender:
         self.const_background = self._init_background(shape)
         self.screen = copy.copy(self.const_background)
         self._init_fonts([11, 12, 16, 22, 24, 32, 40, 48, 64, 110])
-        self.text_selector = iter(TextsSelector(False))
+        self.text_selector = iter(TextsSelector(True))
 
     def _init_fonts(self, sizes):
         self.DejaVu = {

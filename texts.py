@@ -17,6 +17,10 @@ kapitan_bomba_cytaty = [
     "Panie kapitanie, a co by pan zrobił, gdyby się pan dowiedział, \nże pana siostra opierdala kiełbachy kosmitom?",
     "Donna mamma es chujoczita",
     "Matka była mi jak brat, a jak zabijesz brata to jakbyś zabił matkę",
+    "U siebie rób jak u siebie, a u obcego... na odpierdol",
+    "Pytasz, czy jest tanio? Jest tanio. Pytasz, czy jest dobrze? Jest tanio.",
+    "Jeden chłopiec urodził się z fiutkiem średnim, a drugi z zajebistym. Ogromnym!\n" \
+    "Spytacie: który jest szczęśliwy? Żaden - jeden jeździ na wózku, a drugi ma padaczkę.",
 ]
 
 

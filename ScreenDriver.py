@@ -52,19 +52,33 @@ if "armv6l" in platform.uname().machine.lower():
 else:
     logging.info("Running on non-Raspberry platform: using simulation.")
     import matplotlib.pyplot as plt
+    import numpy as np
 
     class SimScreenDriver(ScreenDriver):
         def __init__(self):
             super().__init__()
+            self.fig = None
+            # Enable interactive mode so show() doesn't block
+            plt.ion() 
 
         def init(self):
             logging.info("Initializing simulated screen...")
-            # nothing else needed, screen buffer already created
 
         def update(self, image: Image.Image):
-            logging.info("Updating simulated screen...")
-            plt.imshow(image, cmap='gray')
-            plt.show()
+            logging.info("Updating simulated screen (non-blocking)...")
+            
+            if self.fig is None:
+                self.fig, self.ax = plt.subplots()
+                self.img_plot = self.ax.imshow(image, cmap='gray')
+                plt.show(block=False)
+            else:
+                # Efficiently update the existing window
+                self.img_plot = self.ax.imshow(image, cmap='gray')
+            
+            # Draw and pause briefly to process window events
+            self.fig.canvas.draw()
+            self.fig.canvas.flush_events()
+            plt.pause(0.1)
                 
 
 # Factory function to decide which driver to use at runtime

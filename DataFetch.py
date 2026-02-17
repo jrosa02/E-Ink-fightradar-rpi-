@@ -1,6 +1,7 @@
 from collections import namedtuple
 from dataclasses import dataclass
 import logging
+import backoff
 import numpy as np
 import asyncio
 import datetime
@@ -126,6 +127,7 @@ class DataFetch:
     def __init__(self) -> None:
         pass
 
+    @backoff.on_exception(backoff.expo ,OpenMeteoConnectionError)
     async def getOpenMeteoData(self) -> Forecast:
         async with OpenMeteo() as open_meteo:
             forecast: Forecast = await open_meteo.forecast(
@@ -152,23 +154,18 @@ class DataFetch:
             )
         return forecast
 
-    def __call__(self):
-        forecast = None
-        datetime_i = datetime.datetime.today()
+    async def __call__(self):
         try:
-            forecast = asyncio.run(self.getOpenMeteoData())
+            log.debug("Fetching weather data...")
+            forecast = await self.getOpenMeteoData()
             self.forecast = forecast
+            log.debug("Getting datetime...")
             datetime_i = datetime.datetime.now()
             datetime_i = datetime_i.replace(minute=0, second=0, microsecond=0)
 
         except OpenMeteoConnectionError as e:
             log.error("Failed to connect to OpenMeteo API: {e}", exc_info=True)
-
-        if self.forecast is None:
-            log.critical("No forecast data available. Exiting application.")
-            raise
-        elif forecast is None:
-            forecast = self.forecast
+            exit(-1)
 
         return WeatherData(forecast, datetime_i)
 
